@@ -1,6 +1,6 @@
 # Data Integration Platform
 
-Este proyecto es una plataforma de integración de datos que utiliza Apache Airflow para orquestar procesos ETL (Extract, Transform, Load) que interactúan con SQL Server y RabbitMQ.
+Este proyecto es un Trabajo de Fin de Grado que implementa una plataforma de integración de datos utilizando Apache Airflow para orquestar procesos ETL (Extract, Transform, Load) que interactúan con SQL Server y RabbitMQ.
 
 ## Descripción
 
@@ -112,9 +112,7 @@ docker exec -u airflow data-integration-platform-airflow-worker-1 python -m pip 
    - Realiza transformaciones y validaciones
    - Registra métricas del proceso
 
-2. **Procesar Transacción DAG**
-   - Propósito: Procesamiento de transacciones
-   - Archivos: `procesar_transaccion_*.py`
+> **Nota**: El proyecto incluye DAGs adicionales (`procesar_transaccion_*.py`) que sirven como ejemplos didácticos desarrollados durante la investigación del TFG para demostrar cómo interactuar entre el contenedor de Airflow y la máquina local. Estos DAGs ilustran técnicas para escribir archivos y logs desde el contenedor hacia el sistema host, útiles para entender la comunicación entre contenedores y el sistema anfitrión.
 
 ## Por Qué Se Realizan Estas Configuraciones
 
@@ -155,6 +153,7 @@ docker exec -u airflow data-integration-platform-airflow-worker-1 python -m pip 
 - Las métricas se guardan en una base de datos separada
 - Los suscriptores de RabbitMQ manejan reconexión automática
 - El sistema continúa funcionando incluso si un suscriptor está caído temporalmente
+- Este proyecto fue desarrollado como parte de un Trabajo de Fin de Grado, sirviendo como demostración práctica de conceptos de integración de datos, uso de contenedores y mensajería asíncrona
 
 ## Troubleshooting
 
@@ -171,7 +170,3 @@ Si encuentra problemas con RabbitMQ:
 3. Verificar que los suscriptores están ejecutándose y conectados
 4. Revisar los logs de los suscriptores para mensajes de error
 5. Comprobar la configuración de las colas y exchanges en la interfaz de administración
-
-## Licencia
-
-Este proyecto está bajo la Licencia MIT.
