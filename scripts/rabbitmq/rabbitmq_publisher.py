@@ -94,6 +94,85 @@ def generate_customer_data(faker):
     }
     return customer_data
 
+# Define lista de colores en inglés de una palabra
+colors = ['Red', 'Blue', 'Green', 'Yellow', 'Black', 'White', 'Silver', 'Purple', 'Orange']
+
+def get_color_translations(color_en):
+    translations_es = {
+        'Red': 'Rojo',
+        'Blue': 'Azul',
+        'Green': 'Verde',
+        'Yellow': 'Amarillo',
+        'Black': 'Negro',
+        'White': 'Blanco',
+        'Silver': 'Plateado',
+        'Purple': 'Morado',
+        'Orange': 'Naranja'
+    }
+    translations_fr = {
+        'Red': 'Rouge',
+        'Blue': 'Bleu',
+        'Green': 'Vert',
+        'Yellow': 'Jaune',
+        'Black': 'Noir',
+        'White': 'Blanc',
+        'Silver': 'Argenté',
+        'Purple': 'Violet',
+        'Orange': 'Orange'
+    }
+    return {
+        'es': translations_es.get(color_en, color_en),
+        'fr': translations_fr.get(color_en, color_en)
+    }
+
+def generate_product_data(faker):
+    # Seleccionar un color consistente para todas las variantes
+    selected_color = faker.random_element(elements=colors)
+    model_number = faker.random_number(digits=3)
+    size = str(faker.random_int(min=48, max=52))
+    
+    # Obtener la traducción al español y francés del color
+    color_translations = get_color_translations(selected_color)
+    
+    product_data = {
+        "type": "product",
+        "ProductAlternateKey": f"BK-{faker.random_letter()}{faker.random_number(digits=2)}B-{faker.random_number(digits=2)}",
+        "ProductSubcategoryKey": 2,
+        "WeightUnitMeasureCode": "LB ",
+        "SizeUnitMeasureCode": "CM ",
+        "EnglishProductName": f"Road-{model_number} {selected_color}, {size}",
+        "SpanishProductName": f"Carretera-{model_number} {color_translations['es']}, {size}",
+        "FrenchProductName": f"Vélo Route-{model_number} {color_translations['fr']}, {size}",
+        "StandardCost": round(float(faker.random_number(digits=3)), 4),
+        "FinishedGoodsFlag": 1,
+        "Color": selected_color,
+        "SafetyStockLevel": faker.random_int(min=75, max=100),
+        "ReorderPoint": faker.random_int(min=50, max=75),
+        "ListPrice": round(float(faker.random_number(digits=3)), 2),
+        "Size": size,
+        "SizeRange": "48-52 CM",
+        "Weight": round(float(faker.random_number(digits=2)), 2),
+        "DaysToManufacture": faker.random_int(min=1, max=5),
+        "ProductLine": faker.random_element(elements=('R ', 'M ', 'T ')),
+        "DealerPrice": round(float(faker.random_number(digits=3)), 3),
+        "Class": faker.random_element(elements=('H ', 'M ', 'L ')),
+        "Style": faker.random_element(elements=('U ', 'M ', 'W ')),
+        "ModelName": f"Road-{model_number}",
+        "EnglishDescription": "Entry level adult bike; offers a comfortable ride cross-country or down the block. Quick-release hubs and rims.",
+        "FrenchDescription": "Vélo d'adulte d'entrée de gamme ; permet une conduite confortable en ville ou sur les chemins de campagne. Moyeux et rayons à blocage rapide.",
+        "ChineseDescription": "入门级成人自行车；确保越野旅行或公路骑乘的舒适。快拆式车毂和轮缘。",
+        "ArabicDescription": "إنها دراجة مناسبة للمبتدئين من البالغين؛ فهي توفر قيادة مريحة سواءً على الطرق الوعرة أو في ساحة المدينة. يتميز محورا العجلتين وإطاريهما المعدنيين بسرعة التفكيك.",
+        "HebrewDescription": "אופני מבוגרים למתחילים; מציעים רכיבה נוחה \"מחוף לחוף\" או לאורך הרחוב. טבורים וחישורים לשחרור מהיר.",
+        "ThaiDescription": "จักรยานระดับเริ่มต้นสำหรับผู้ใหญ่ ให้ความสบายในการขับขี่แม้ในเส้นทางทุรกันดารหรือในเมือง  ดุมและขอบล้อถอดได้สะดวก",
+        "GermanDescription": "Ein Erwachsenenrad für Einsteiger; bietet Komfort über Land und in der Stadt. Schnellspann-Naben und Felgen.",
+        "JapaneseDescription": "エントリー レベルに対応する、クロスカントリーにも街への買い物にも快適な、大人の自転車。ハブおよびリムの取りはずしが容易です。",
+        "TurkishDescription": "Başlangıç seviyesinde yetişkin bisikleti, kırda veya sokağınızda konforlu sürüş sunar. Kolay çıkarılan göbekler ve jantlar.",
+        "StartDate": "2013-07-02",
+        "EndDate": None,
+        "Status": "Current"
+    }
+    return product_data
+
 def publish_messages():
     connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
     channel = connection.channel()
@@ -102,36 +181,30 @@ def publish_messages():
     exchange_name = 'mensajes_fanout_durable'
     channel.exchange_declare(exchange=exchange_name, exchange_type='fanout', durable=True)
 
-    # Declarar las colas duraderas que usarán los subscribers
-    channel.queue_declare(queue='sql_subscriber_queue', durable=True)
-    channel.queue_declare(queue='airflow_subscriber_queue', durable=True)
-    
-    # Vincular las colas al exchange
-    channel.queue_bind(exchange=exchange_name, queue='sql_subscriber_queue')
-    channel.queue_bind(exchange=exchange_name, queue='airflow_subscriber_queue')
-
     faker = Faker('es_ES')  # Configuramos Faker para español
-
-    # Define lista de colores en inglés de una palabra
-    colors = ['Red', 'Blue', 'Green', 'Yellow', 'Black', 'White', 'Silver', 'Brown', 'Purple', 'Orange']
 
     # Variable para alternar entre customer y product
     is_customer = True
 
     while True:
         # Generate product data
+        selected_color = faker.random_element(elements=colors)
+        translations = get_color_translations(selected_color)
+        model_number = faker.random_number(digits=3)
+        size_number = faker.random_number(digits=2)
+        
         product_data = {
             "type": "product",
             "ProductAlternateKey": f"BK-{faker.random_letter()}{faker.random_number(digits=2)}B-{faker.random_number(digits=2)}",
             "ProductSubcategoryKey": 2,  # Siempre será 2
             "WeightUnitMeasureCode": "LB ",  # Espacio adicional requerido
             "SizeUnitMeasureCode": "CM ",    # Espacio adicional requerido
-            "EnglishProductName": f"Road-{faker.random_number(digits=3)} {faker.random_element(elements=colors)}, {faker.random_number(digits=2)}",
-            "SpanishProductName": f"Carretera: {faker.random_number(digits=3)}, {faker.random_element(elements=colors)}, {faker.random_number(digits=2)}",
-            "FrenchProductName": f"Vélo de route {faker.random_number(digits=3)} {faker.random_element(elements=colors)}, {faker.random_number(digits=2)}",
+            "EnglishProductName": f"Road-{model_number} {selected_color}, {size_number}",
+            "SpanishProductName": f"Carretera: {model_number}, {translations['es']}, {size_number}",
+            "FrenchProductName": f"Vélo de route {model_number} {translations['fr']}, {size_number}",
             "StandardCost": round(float(faker.random_number(digits=3)), 4),
             "FinishedGoodsFlag": 1,
-            "Color": faker.random_element(elements=colors),
+            "Color": selected_color,
             "SafetyStockLevel": faker.random_int(min=75, max=100),
             "ReorderPoint": faker.random_int(min=50, max=75),
             "ListPrice": round(float(faker.random_number(digits=3)), 2),
@@ -143,7 +216,7 @@ def publish_messages():
             "DealerPrice": round(float(faker.random_number(digits=3)), 3),
             "Class": faker.random_element(elements=('H ', 'M ', 'L ')),
             "Style": faker.random_element(elements=('U ', 'M ', 'W ')),
-            "ModelName": f"Road-{faker.random_number(digits=3)}",
+            "ModelName": f"Road-{model_number}",
             "EnglishDescription": "Entry level adult bike; offers a comfortable ride cross-country or down the block. Quick-release hubs and rims.",
             "FrenchDescription": "Vélo d'adulte d'entrée de gamme ; permet une conduite confortable en ville ou sur les chemins de campagne. Moyeux et rayons à blocage rapide.",
             "ChineseDescription": "入门级成人自行车；确保越野旅行或公路骑乘的舒适。快拆式车毂和轮缘。",
