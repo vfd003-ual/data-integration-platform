@@ -3,8 +3,30 @@ import json
 import uuid
 import time
 import random
+import sys
+from pathlib import Path
 from datetime import datetime
 from faker import Faker
+
+# Añadir el directorio padre (scripts) al Python path
+parent_dir = str(Path(__file__).resolve().parent.parent)
+sys.path.append(parent_dir)
+
+from sql_server_connection_local import get_sql_server_connection
+
+def get_last_customer_alternate_key():
+    try:
+        conn = get_sql_server_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(CAST(SUBSTRING(CustomerAlternateKey, 3, 8) AS INT)) FROM [AdventureWorksDW2019].[dbo].[DimCustomer]")
+        result = cursor.fetchone()[0]
+        return result if result is not None else 29483
+    except Exception as e:
+        print(f"Error obteniendo último CustomerAlternateKey: {e}")
+        return 29483  # Valor por defecto si hay error
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
 
 # Primero, definimos los datos de geografía (como variable global)
 GEOGRAPHY_DATA = [
@@ -54,9 +76,12 @@ def generate_customer_data(faker):
     street_type = random.choice(street_types[location["City"]])
     address = f"{faker.building_number()} {street_type} {random.choice(['St', 'Ave', 'Rd', 'Dr'])}"
 
+    # Obtener el siguiente CustomerAlternateKey
+    next_customer_number = get_last_customer_alternate_key() + 1
+
     customer_data = {
         "type": "customer",
-        "CustomerAlternateKey": f"AW{faker.random_number(digits=8)}",
+        "CustomerAlternateKey": f"AW{str(next_customer_number).zfill(8)}",
         "GeographyKey": location["GeographyKey"],  # Usar GeographyKey real
         "Title": faker.random_element(elements=('Mr.', 'Mrs.', 'Ms.')),
         "FirstName": faker.first_name(),
@@ -128,35 +153,57 @@ def get_color_translations(color_en):
 def generate_product_data(faker):
     # Seleccionar un color consistente para todas las variantes
     selected_color = faker.random_element(elements=colors)
-    model_number = faker.random_number(digits=3)
-    size = str(faker.random_int(min=48, max=52))
     
-    # Obtener la traducción al español y francés del color
-    color_translations = get_color_translations(selected_color)
+    # Usar números de modelo específicos (750, 760, 770)
+    model_number = faker.random_element(elements=[750, 760, 770])
+    
+    # Definir rangos de tamaño válidos y seleccionar uno
+    size_ranges = ["42-46", "48-52"]
+    size_range = faker.random_element(elements=size_ranges)
+    min_size, max_size = map(int, size_range.split("-"))
+    size = str(faker.random_int(min=min_size, max=max_size))
+    
+    # Generar ProductAlternateKey basado en el modelo y características
+    # Format: BK-R19B-44 donde:
+    # BK = Bike
+    # R = Road
+    # 19/20/21 = Dos dígitos basados en el modelo (750->19, 760->20, 770->21)
+    # B = Primera letra del color
+    # 44 = Tamaño exacto
+    model_prefix = {"750": "19", "760": "20", "770": "21"}
+    product_alternate_key = f"BK-R{model_prefix[str(model_number)]}{selected_color[0]}-{size}"
+    
+    # Obtener traducciones de color
+    translations = get_color_translations(selected_color)
+    
+    # Generar precios realistas
+    standard_cost = round(faker.random_int(min=340, max=360) + faker.random.random(), 4)  # ~350
+    list_price = round(standard_cost + 120, 2)  # ~470 (diferencia de 120)
+    dealer_price = round(standard_cost * 1.15, 3)  # 15% más que standard_cost
     
     product_data = {
         "type": "product",
-        "ProductAlternateKey": f"BK-{faker.random_letter()}{faker.random_number(digits=2)}B-{faker.random_number(digits=2)}",
+        "ProductAlternateKey": product_alternate_key,
         "ProductSubcategoryKey": 2,
         "WeightUnitMeasureCode": "LB ",
         "SizeUnitMeasureCode": "CM ",
         "EnglishProductName": f"Road-{model_number} {selected_color}, {size}",
-        "SpanishProductName": f"Carretera-{model_number} {color_translations['es']}, {size}",
-        "FrenchProductName": f"Vélo Route-{model_number} {color_translations['fr']}, {size}",
-        "StandardCost": round(float(faker.random_number(digits=3)), 4),
+        "SpanishProductName": f"Carretera-{model_number} {translations['es']}, {size}",
+        "FrenchProductName": f"Vélo Route-{model_number} {translations['fr']}, {size}",
+        "StandardCost": standard_cost,
         "FinishedGoodsFlag": 1,
         "Color": selected_color,
-        "SafetyStockLevel": faker.random_int(min=75, max=100),
-        "ReorderPoint": faker.random_int(min=50, max=75),
-        "ListPrice": round(float(faker.random_number(digits=3)), 2),
+        "SafetyStockLevel": 100,
+        "ReorderPoint": 75,
+        "ListPrice": list_price,
         "Size": size,
-        "SizeRange": "48-52 CM",
-        "Weight": round(float(faker.random_number(digits=2)), 2),
-        "DaysToManufacture": faker.random_int(min=1, max=5),
-        "ProductLine": faker.random_element(elements=('R ', 'M ', 'T ')),
-        "DealerPrice": round(float(faker.random_number(digits=3)), 3),
-        "Class": faker.random_element(elements=('H ', 'M ', 'L ')),
-        "Style": faker.random_element(elements=('U ', 'M ', 'W ')),
+        "SizeRange": f"{size_range} CM",
+        "Weight": round(faker.random_int(min=19, max=21) + faker.random.random(), 2),
+        "DaysToManufacture": 4,
+        "ProductLine": "R ",
+        "DealerPrice": dealer_price,
+        "Class": "L ",
+        "Style": "U ",
         "ModelName": f"Road-{model_number}",
         "EnglishDescription": "Entry level adult bike; offers a comfortable ride cross-country or down the block. Quick-release hubs and rims.",
         "FrenchDescription": "Vélo d'adulte d'entrée de gamme ; permet une conduite confortable en ville ou sur les chemins de campagne. Moyeux et rayons à blocage rapide.",
@@ -187,59 +234,14 @@ def publish_messages():
     is_customer = True
 
     while True:
-        # Generate product data
-        selected_color = faker.random_element(elements=colors)
-        translations = get_color_translations(selected_color)
-        model_number = faker.random_number(digits=3)
-        size_number = faker.random_number(digits=2)
-        
-        product_data = {
-            "type": "product",
-            "ProductAlternateKey": f"BK-{faker.random_letter()}{faker.random_number(digits=2)}B-{faker.random_number(digits=2)}",
-            "ProductSubcategoryKey": 2,  # Siempre será 2
-            "WeightUnitMeasureCode": "LB ",  # Espacio adicional requerido
-            "SizeUnitMeasureCode": "CM ",    # Espacio adicional requerido
-            "EnglishProductName": f"Road-{model_number} {selected_color}, {size_number}",
-            "SpanishProductName": f"Carretera: {model_number}, {translations['es']}, {size_number}",
-            "FrenchProductName": f"Vélo de route {model_number} {translations['fr']}, {size_number}",
-            "StandardCost": round(float(faker.random_number(digits=3)), 4),
-            "FinishedGoodsFlag": 1,
-            "Color": selected_color,
-            "SafetyStockLevel": faker.random_int(min=75, max=100),
-            "ReorderPoint": faker.random_int(min=50, max=75),
-            "ListPrice": round(float(faker.random_number(digits=3)), 2),
-            "Size": str(faker.random_int(min=48, max=52)),
-            "SizeRange": "48-52 CM",
-            "Weight": round(float(faker.random_number(digits=2)), 2),
-            "DaysToManufacture": faker.random_int(min=1, max=5),
-            "ProductLine": faker.random_element(elements=('R ', 'M ', 'T ')),
-            "DealerPrice": round(float(faker.random_number(digits=3)), 3),
-            "Class": faker.random_element(elements=('H ', 'M ', 'L ')),
-            "Style": faker.random_element(elements=('U ', 'M ', 'W ')),
-            "ModelName": f"Road-{model_number}",
-            "EnglishDescription": "Entry level adult bike; offers a comfortable ride cross-country or down the block. Quick-release hubs and rims.",
-            "FrenchDescription": "Vélo d'adulte d'entrée de gamme ; permet une conduite confortable en ville ou sur les chemins de campagne. Moyeux et rayons à blocage rapide.",
-            "ChineseDescription": "入门级成人自行车；确保越野旅行或公路骑乘的舒适。快拆式车毂和轮缘。",
-            "ArabicDescription": "إنها دراجة مناسبة للمبتدئين من البالغين؛ فهي توفر قيادة مريحة سواءً على الطرق الوعرة أو في ساحة المدينة. يتميز محورا العجلتين وإطاريهما المعدنيين بسرعة التفكيك.",
-            "HebrewDescription": "אופני מבוגרים למתחילים; מציעים רכיבה נוחה \"מחוף לחוף\" או לאורך הרחוב. טבורים וחישורים לשחרור מהיר.",
-            "ThaiDescription": "จักรยานระดับเริ่มต้นสำหรับผู้ใหญ่ ให้ความสบายในการขับขี่แม้ในเส้นทางทุรกันดารหรือในเมือง  ดุมและขอบล้อถอดได้สะดวก",
-            "GermanDescription": "Ein Erwachsenenrad für Einsteiger; bietet Komfort über Land und in der Stadt. Schnellspann-Naben und Felgen.",
-            "JapaneseDescription": "エントリー レベルに対応する、クロスカントリーにも街への買い物にも快適な、大人の自転車。ハブおよびリムの取りはずしが容易です。",
-            "TurkishDescription": "Başlangıç seviyesinde yetişkin bisikleti, kırda veya sokağınızda konforlu sürüş sunar. Kolay çıkarılan göbekler ve jantlar.",
-            # Usar formato SQL Server exacto para la fecha
-            "StartDate": "2013-07-02",
-            "EndDate": None,
-            "Status": "Current"
-        }
-
-        # Alternar entre customer y product
+        # Alternar entre customer y product usando las funciones de generación correspondientes
         if is_customer:
             message = generate_customer_data(faker)
         else:
-            message = product_data
+            message = generate_product_data(faker)
             
         is_customer = not is_customer  # Cambiar para la siguiente iteración
-
+        
         # Configurar propiedades del mensaje para persistencia
         properties = pika.BasicProperties(
             delivery_mode=2,        # hace el mensaje persistente
