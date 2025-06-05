@@ -8,7 +8,6 @@ from pathlib import Path
 from datetime import datetime
 from faker import Faker
 
-# Añadir el directorio padre (scripts) al Python path
 parent_dir = str(Path(__file__).resolve().parent.parent)
 sys.path.append(parent_dir)
 
@@ -28,7 +27,7 @@ def get_last_customer_alternate_key():
         if 'cursor' in locals(): cursor.close()
         if 'conn' in locals(): conn.close()
 
-# Primero, definimos los datos de geografía (como variable global)
+# Primero, definimos los datos de geografia (como variable global)
 GEOGRAPHY_DATA = [
     {
         "GeographyKey": 655, "City": "Rock Springs", "StateProvinceCode": "WY", 
@@ -61,10 +60,8 @@ GEOGRAPHY_DATA = [
 ]
 
 def generate_customer_data(faker):
-    # Seleccionar una ubicación aleatoria de nuestros datos reales
     location = random.choice(GEOGRAPHY_DATA)
     
-    # Generar dirección específica para la ciudad
     street_types = {
         "Rock Springs": ["Canyon", "Ridge", "Mountain", "Rock", "Spring"],
         "Cheyenne": ["Frontier", "Pioneer", "Capitol", "Prairie", "Buffalo"],
@@ -72,11 +69,9 @@ def generate_customer_data(faker):
         "Jefferson City": ["Capitol", "Missouri", "Madison", "Jefferson", "High"]
     }
     
-    # Seleccionar un tipo de calle específico para la ciudad
     street_type = random.choice(street_types[location["City"]])
     address = f"{faker.building_number()} {street_type} {random.choice(['St', 'Ave', 'Rd', 'Dr'])}"
 
-    # Obtener el siguiente CustomerAlternateKey
     next_customer_number = get_last_customer_alternate_key() + 1
 
     customer_data = {
@@ -104,14 +99,12 @@ def generate_customer_data(faker):
         "FrenchOccupation": 'Cadre',
         "HouseOwnerFlag": faker.random_element(elements=(0, 1)),
         "NumberCarsOwned": faker.random_int(min=0, max=5),
-        # Usar dirección real de Estados Unidos
         "AddressLine1": address,
         "AddressLine2": None,
         "City": location["City"],
         "StateProvinceCode": location["StateProvinceCode"],
         "PostalCode": location["PostalCode"],
-        # Número de teléfono sin formato específico
-        "Phone": faker.numerify('##########'),  # 10 dígitos sin formato
+        "Phone": faker.numerify('##########'),  # sin formato
         "DateFirstPurchase": faker.date_between(start_date='-5y').strftime('%Y-%m-%d'),
         "CommuteDistance": faker.random_element(
             elements=('0-1 Miles', '1-2 Miles', '2-5 Miles', '5-10 Miles', '10+ Miles')
@@ -119,7 +112,6 @@ def generate_customer_data(faker):
     }
     return customer_data
 
-# Define lista de colores en inglés de una palabra
 colors = ['Red', 'Blue', 'Green', 'Yellow', 'Black', 'White', 'Silver', 'Purple', 'Orange']
 
 def get_color_translations(color_en):
@@ -151,25 +143,22 @@ def get_color_translations(color_en):
     }
 
 def generate_product_data(faker):
-    # Seleccionar un color consistente para todas las variantes
     selected_color = faker.random_element(elements=colors)
     
-    # Usar números de modelo específicos (750, 760, 770)
     model_number = faker.random_element(elements=[750, 760, 770])
     
-    # Definir rangos de tamaño válidos y seleccionar uno
     size_ranges = ["42-46", "48-52"]
     size_range = faker.random_element(elements=size_ranges)
     min_size, max_size = map(int, size_range.split("-"))
     size = str(faker.random_int(min=min_size, max=max_size))
     
-    # Generar ProductAlternateKey basado en el modelo y características
+    # Generar ProductAlternateKey basado en el modelo y caracteristicas
     # Format: BK-R19B-44 donde:
     # BK = Bike
     # R = Road
     # 19/20/21 = Dos dígitos basados en el modelo (750->19, 760->20, 770->21)
     # B = Primera letra del color
-    # 44 = Tamaño exacto
+    # 44 = Tamanio exacto
     model_prefix = {"750": "19", "760": "20", "770": "21"}
     product_alternate_key = f"BK-R{model_prefix[str(model_number)]}{selected_color[0]}-{size}"
     
@@ -179,7 +168,7 @@ def generate_product_data(faker):
     # Generar precios realistas
     standard_cost = round(faker.random_int(min=340, max=360) + faker.random.random(), 4)  # ~350
     list_price = round(standard_cost + 120, 2)  # ~470 (diferencia de 120)
-    dealer_price = round(standard_cost * 1.15, 3)  # 15% más que standard_cost
+    dealer_price = round(standard_cost * 1.15, 3)  # 15% mas que standard_cost
     
     product_data = {
         "type": "product",
@@ -228,13 +217,12 @@ def publish_messages():
     exchange_name = 'mensajes_fanout_durable'
     channel.exchange_declare(exchange=exchange_name, exchange_type='fanout', durable=True)
 
-    faker = Faker('es_ES')  # Configuramos Faker para español
-
+    faker = Faker('es_ES')  
     # Variable para alternar entre customer y product
     is_customer = True
 
     while True:
-        # Alternar entre customer y product usando las funciones de generación correspondientes
+        # Alternar entre customer y product usando las funciones de generacion correspondientes
         if is_customer:
             message = generate_customer_data(faker)
         else:
@@ -246,7 +234,7 @@ def publish_messages():
         properties = pika.BasicProperties(
             delivery_mode=2,        # hace el mensaje persistente
             content_type='application/json',
-            message_id=str(uuid.uuid4()),  # identificador único
+            message_id=str(uuid.uuid4()),  # identificador unico
             timestamp=int(time.time())     # timestamp del mensaje
         )
         

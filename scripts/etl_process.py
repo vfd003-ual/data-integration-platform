@@ -10,7 +10,6 @@ import pytz
 import re
 import calendar
 
-# Añadir el directorio padre al Python path
 parent_dir = str(Path(__file__).resolve().parent)
 sys.path.append(parent_dir)
 
@@ -21,7 +20,7 @@ LOG_DIR = os.path.join(ROOT_DIR, "logs")
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
-# Variable global para el timestamp de la ejecución
+# Variable global para el timestamp de la ejecucion
 EXECUTION_TIMESTAMP = None
 LOG_FILE = None
 
@@ -60,7 +59,7 @@ def sustituir_nulls():
             cursor = conn.cursor()
             rows_updated = 0
             
-            # Diccionario: columna -> valor de sustitución
+            # Diccionario: columna -> valor de sustitucion
             columnas_a_actualizar = {
                 "WeightUnitMeasureCode": "'Unk'",
                 "SizeUnitMeasureCode": "'Unk'",
@@ -142,11 +141,11 @@ def validar_telefono(phone, postal_code=None, geography_key=None):
     
     # Formato especial para GeographyKey 654: ###-555-####
     if geography_key == 654:
-        if len(nums) >= 7:  # Asegurarnos de tener suficientes dígitos
+        if len(nums) >= 7:  # Asegurarnos de tener suficientes digitos
             return f"{nums[:3]}-555-{nums[-4:]}"
         return "INVALID"
     
-    # Para otros casos, mantener la lógica original
+    # Para otros casos, mantener la logica original
     if postal_code and len(nums) == 7:
         area_code = postal_code[:3]
         return f"+1 {area_code}-{nums[:3]}-{nums[3:]}"
@@ -252,7 +251,7 @@ def verificar_fecha_en_dimension(conn, fecha):
         write_log(f"⚠️ Fecha no encontrada en DimDate: {fecha}")
         return insertar_fecha_en_dimension(conn, fecha)
 
-# Primero, definimos las GeographyKeys válidas como constante
+# Primero, definimos las GeographyKeys validas como constante
 VALID_GEOGRAPHY_KEYS = {655, 654, 589, 483}
 
 def validar_datos_cliente():
@@ -273,7 +272,7 @@ def validar_datos_cliente():
             
         cursor = conn.cursor()
         
-        # Obtener todos los clientes que necesitan validación
+        # Obtener todos los clientes que necesitan validacion
         query = """
             SELECT 
                 c.CustomerKey,
@@ -299,7 +298,7 @@ def validar_datos_cliente():
             valores = []
             cambios_realizados = False
 
-            # Validar teléfono solo si el cliente está en una geografía válida
+            # Validar telefono solo si el cliente esta en una geografia valida
             if phone and geography_key in VALID_GEOGRAPHY_KEYS:
                 telefono_validado = validar_telefono(phone, postal_code, geography_key)
                 if telefono_validado != phone and telefono_validado != "INVALID":
@@ -406,7 +405,7 @@ def ejecutar_etl():
 
             cursor = conn.cursor()
             write_log("🔄 Verificando si existe la tabla de métricas...")
-            # Crear tabla de métricas si no existe
+            # Crear tabla de metricas si no existe
             cursor.execute("""
             IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'ETLMetrics')
             BEGIN

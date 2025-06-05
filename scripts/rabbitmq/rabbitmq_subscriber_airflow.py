@@ -56,7 +56,7 @@ def callback(ch, method, properties, body):
         print("⚠️ Message rejected and requeued for retry")
 
 def start_subscriber():
-    retry_delay = 5  # segundos entre intentos de reconexión
+    retry_delay = 5 
     while True:
         try:
             connection = pika.BlockingConnection(
@@ -71,7 +71,7 @@ def start_subscriber():
             exchange_name = 'mensajes_fanout_durable'
             channel.exchange_declare(exchange=exchange_name, exchange_type='fanout', durable=True)
 
-            # Crear cola duradera con nombre específico
+            # Crear cola duradera con nombre especifico
             queue_name = 'airflow_subscriber_queue_durable'
             
             # Intentar declarar la cola sin argumentos primero
@@ -86,13 +86,11 @@ def start_subscriber():
                     durable=True
                 )
             
-            # Añadir el binding entre la cola y el exchange
             channel.queue_bind(
                 exchange=exchange_name,
                 queue=queue_name
             )
             
-            # Configurar QoS más conservador
             channel.basic_qos(prefetch_count=1)
 
             channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)

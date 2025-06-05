@@ -38,7 +38,7 @@ def ensure_metrics_tables_exist():
     try:
         cursor = conn.cursor()
         
-        # Crear tabla de métricas ETL si no existe
+        # Crear tabla de metricas ETL si no existe
         cursor.execute("""
         IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'ETLMetrics')
         CREATE TABLE ETLMetrics (
@@ -73,8 +73,6 @@ class ETLMetricsManager:
         self.additional_info = None
 
     def start_process(self, process_name, table_affected):
-        """Inicia el seguimiento de un proceso ETL"""
-        # Añadimos 2 horas al timestamp actual
         self.start_time = datetime.now() + timedelta(hours=2)
         self.process_name = process_name
         self.table_affected = table_affected
@@ -83,11 +81,9 @@ class ETLMetricsManager:
         self.additional_info = None
 
     def add_processed_rows(self, count):
-        """Añade al contador de filas procesadas"""
         self.rows_processed += count
 
     def add_error(self, error_message=None):
-        """Registra un error"""
         self.error_count += 1
         if error_message:
             if self.additional_info:
@@ -96,11 +92,10 @@ class ETLMetricsManager:
                 self.additional_info = error_message
 
     def save_metrics(self):
-        """Guarda las métricas en la base de datos"""
         if not self.start_time:
             raise ValueError("No se ha iniciado ningún proceso de ETL")
 
-        # Calculamos el tiempo de ejecución usando también el timestamp ajustado
+        # Calculamos el tiempo de ejecucion usando tambien el timestamp ajustado
         execution_time = ((datetime.now() + timedelta(hours=2)) - self.start_time).total_seconds()
         
         try:
