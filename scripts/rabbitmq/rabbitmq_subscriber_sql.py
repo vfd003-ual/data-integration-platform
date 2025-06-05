@@ -2,16 +2,23 @@ import sys
 from pathlib import Path
 import time
 
-# Añadir el directorio padre (scripts) al Python path
 parent_dir = str(Path(__file__).resolve().parent.parent)
 sys.path.append(parent_dir)
 
-# Guarda en el sistema operacional
 
 import pika
 import json
 from datetime import datetime
 from sql_server_connection_local import get_sql_server_connection
+
+def get_last_key(cursor, table_name, key_column):
+    try:
+        cursor.execute(f"SELECT MAX({key_column}) FROM [AdventureWorksDW2019].[dbo].[{table_name}]")
+        result = cursor.fetchone()[0]
+        return result if result is not None else 0
+    except Exception as e:
+        print(f"❌ Error obteniendo última clave de {table_name}: {e}")
+        return 0
 
 def callback(ch, method, properties, body):
     mensaje = json.loads(body)
@@ -23,16 +30,25 @@ def callback(ch, method, properties, body):
             cursor = conn.cursor()
             try:
                 if mensaje.get('type') == 'customer':
+                    # Obtener el último CustomerKey
+                    last_customer_key = get_last_key(cursor, 'DimCustomer', 'CustomerKey')
+                    next_customer_key = last_customer_key + 1
+                    
                     cursor.execute("""
+                        SET IDENTITY_INSERT [AdventureWorksDW2019].[dbo].[DimCustomer] ON;
+                        
                         INSERT INTO [AdventureWorksDW2019].[dbo].[DimCustomer]
-                        (CustomerAlternateKey, GeographyKey, Title, FirstName, MiddleName, 
+                        (CustomerKey, CustomerAlternateKey, GeographyKey, Title, FirstName, MiddleName, 
                         LastName, NameStyle, BirthDate, MaritalStatus, Suffix, Gender, 
                         EmailAddress, YearlyIncome, TotalChildren, NumberChildrenAtHome, 
                         EnglishEducation, SpanishEducation, FrenchEducation, EnglishOccupation, 
                         SpanishOccupation, FrenchOccupation, HouseOwnerFlag, NumberCarsOwned, 
                         AddressLine1, AddressLine2, Phone, DateFirstPurchase, CommuteDistance)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        
+                        SET IDENTITY_INSERT [AdventureWorksDW2019].[dbo].[DimCustomer] OFF;
                     """, (
+                        next_customer_key,
                         mensaje['CustomerAlternateKey'],
                         mensaje['GeographyKey'],
                         mensaje['Title'],
@@ -62,13 +78,18 @@ def callback(ch, method, properties, body):
                         mensaje['DateFirstPurchase'],
                         mensaje['CommuteDistance']
                     ))
-                    print("✅ Cliente guardado en DimCustomer")
+                    print(f"✅ Cliente guardado en DimCustomer con CustomerKey: {next_customer_key}")
 
                 elif mensaje.get('type') == 'product':
-                    # Nota: Asegurar que la tabla tenga la columna ProductKey configurada como IDENTITY o proporcionar un valor
+                    # Obtener el ultimo ProductKey
+                    last_product_key = get_last_key(cursor, 'DimProduct', 'ProductKey')
+                    next_product_key = last_product_key + 1
+                    
                     cursor.execute("""
+                        SET IDENTITY_INSERT [AdventureWorksDW2019].[dbo].[DimProduct] ON;
+                        
                         INSERT INTO [AdventureWorksDW2019].[dbo].[DimProduct]
-                        (ProductAlternateKey, ProductSubcategoryKey, WeightUnitMeasureCode, 
+                        (ProductKey, ProductAlternateKey, ProductSubcategoryKey, WeightUnitMeasureCode, 
                         SizeUnitMeasureCode, EnglishProductName, SpanishProductName, FrenchProductName,
                         StandardCost, FinishedGoodsFlag, Color, SafetyStockLevel, ReorderPoint,
                         ListPrice, Size, SizeRange, Weight, DaysToManufacture, ProductLine,
@@ -76,9 +97,12 @@ def callback(ch, method, properties, body):
                         FrenchDescription, ChineseDescription, ArabicDescription, HebrewDescription,
                         ThaiDescription, GermanDescription, JapaneseDescription, TurkishDescription,
                         StartDate, EndDate, Status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        
+                        SET IDENTITY_INSERT [AdventureWorksDW2019].[dbo].[DimProduct] OFF;
                     """, (
+                        next_product_key,
                         mensaje['ProductAlternateKey'],
                         mensaje['ProductSubcategoryKey'],
                         mensaje['WeightUnitMeasureCode'],
@@ -111,11 +135,11 @@ def callback(ch, method, properties, body):
                         mensaje.get('GermanDescription', 'Einsteiger-Fahrrad'),
                         mensaje.get('JapaneseDescription', 'エントリー レベルに対応する、クロスカントリーにも街への買い物にも快適な、大人の自転車。ハブおよびリムの取りはずしが容易です。'),
                         mensaje.get('TurkishDescription', 'Başlangıç seviyesinde yetişkin bisikleti, kırda veya sokağınızda konforlu sürüş sunar. Kolay çıkarılan göbekler ve jantlar.'),
-                        mensaje['StartDate'],  # Ahora es un objeto datetime de Python
-                        mensaje['EndDate'],    # None o un objeto datetime
+                        mensaje['StartDate'],
+                        mensaje['EndDate'],
                         mensaje['Status']
                     ))
-                    print("✅ Producto guardado en DimProduct")
+                    print(f"✅ Producto guardado en DimProduct con ProductKey: {next_product_key}")
 
                 conn.commit()
                 ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -130,7 +154,7 @@ def callback(ch, method, properties, body):
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
 def start_subscriber():
-    retry_delay = 5  # segundos entre intentos de reconexión
+    retry_delay = 5  # segundos entre intentos de reconexion
     while True:
         try:
             connection = pika.BlockingConnection(
@@ -145,7 +169,7 @@ def start_subscriber():
             exchange_name = 'mensajes_fanout_durable'
             channel.exchange_declare(exchange=exchange_name, exchange_type='fanout', durable=True)
 
-            # Crear cola duradera con nombre específico
+            # Crear cola duradera con nombre especifico
             queue_name = 'sql_subscriber_queue_durable'
             
             # Intentar declarar la cola sin argumentos primero
@@ -160,13 +184,13 @@ def start_subscriber():
                     durable=True
                 )
             
-            # Añadir el binding entre la cola y el exchange
+            # Incluir el binding entre la cola y el exchange
             channel.queue_bind(
                 exchange=exchange_name,
                 queue=queue_name
             )
             
-            # Configurar QoS más conservador
+            # Configurar QoS mas conservador
             channel.basic_qos(prefetch_count=1)
 
             channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
