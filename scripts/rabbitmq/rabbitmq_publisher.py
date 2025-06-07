@@ -13,19 +13,33 @@ sys.path.append(parent_dir)
 
 from sql_server_connection_local import get_sql_server_connection
 
-def get_last_customer_alternate_key():
-    try:
-        conn = get_sql_server_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT MAX(CAST(SUBSTRING(CustomerAlternateKey, 3, 8) AS INT)) FROM [AdventureWorksDW2019].[dbo].[DimCustomer]")
-        result = cursor.fetchone()[0]
-        return result if result is not None else 29483
-    except Exception as e:
-        print(f"Error obteniendo último CustomerAlternateKey: {e}")
-        return 29483  # Valor por defecto si hay error
-    finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+# Variables globales para el seguimiento de CustomerAlternateKey
+last_db_customer_number = None
+customers_created_since_last_query = 0
+
+def get_next_customer_alternate_key():
+    global last_db_customer_number, customers_created_since_last_query
+    
+    # Si es la primera vez o han pasado muchos mensajes, consultar la BD
+    if last_db_customer_number is None or customers_created_since_last_query >= 100:
+        try:
+            conn = get_sql_server_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT MAX(CAST(SUBSTRING(CustomerAlternateKey, 3, 8) AS INT)) FROM [AdventureWorksDW2019].[dbo].[DimCustomer]")
+            result = cursor.fetchone()[0]
+            last_db_customer_number = result if result is not None else 29483
+            customers_created_since_last_query = 0
+        except Exception as e:
+            print(f"Error obteniendo último CustomerAlternateKey: {e}")
+            if last_db_customer_number is None:  # Solo usar valor por defecto si no tenemos ningún valor
+                last_db_customer_number = 29483
+        finally:
+            if 'cursor' in locals(): cursor.close()
+            if 'conn' in locals(): conn.close()
+    
+    # Incrementar el contador y retornar el siguiente numero
+    customers_created_since_last_query += 1
+    return last_db_customer_number + customers_created_since_last_query
 
 # Primero, definimos los datos de geografia (como variable global)
 GEOGRAPHY_DATA = [
@@ -72,12 +86,12 @@ def generate_customer_data(faker):
     street_type = random.choice(street_types[location["City"]])
     address = f"{faker.building_number()} {street_type} {random.choice(['St', 'Ave', 'Rd', 'Dr'])}"
 
-    next_customer_number = get_last_customer_alternate_key() + 1
+    next_customer_number = get_next_customer_alternate_key()
 
     customer_data = {
         "type": "customer",
         "CustomerAlternateKey": f"AW{str(next_customer_number).zfill(8)}",
-        "GeographyKey": location["GeographyKey"],  # Usar GeographyKey real
+        "GeographyKey": location["GeographyKey"],
         "Title": faker.random_element(elements=('Mr.', 'Mrs.', 'Ms.')),
         "FirstName": faker.first_name(),
         "MiddleName": faker.random_letter().upper(),
@@ -200,7 +214,7 @@ def generate_product_data(faker):
         "ArabicDescription": "إنها دراجة مناسبة للمبتدئين من البالغين؛ فهي توفر قيادة مريحة سواءً على الطرق الوعرة أو في ساحة المدينة. يتميز محورا العجلتين وإطاريهما المعدنيين بسرعة التفكيك.",
         "HebrewDescription": "אופני מבוגרים למתחילים; מציעים רכיבה נוחה \"מחוף לחוף\" או לאורך הרחוב. טבורים וחישורים לשחרור מהיר.",
         "ThaiDescription": "จักรยานระดับเริ่มต้นสำหรับผู้ใหญ่ ให้ความสบายในการขับขี่แม้ในเส้นทางทุรกันดารหรือในเมือง  ดุมและขอบล้อถอดได้สะดวก",
-        "GermanDescription": "Ein Erwachsenenrad für Einsteiger; bietet Komfort über Land und in der Stadt. Schnellspann-Naben und Felgen.",
+        "GermanDescription": "Ein Erwachsenenrad für Einsteiger; bietet Komfort über Land and in der Stadt. Schnellspann-Naben und Felgen.",
         "JapaneseDescription": "エントリー レベルに対応する、クロスカントリーにも街への買い物にも快適な、大人の自転車。ハブおよびリムの取りはずしが容易です。",
         "TurkishDescription": "Başlangıç seviyesinde yetişkin bisikleti, kırda veya sokağınızda konforlu sürüş sunar. Kolay çıkarılan göbekler ve jantlar.",
         "StartDate": "2013-07-02",
