@@ -13,6 +13,30 @@ sys.path.append(parent_dir)
 
 from sql_server_connection_local import get_sql_server_connection
 
+# Variables globales para el seguimiento de ProductAlternateKey
+existing_product_keys = set()
+product_keys_last_check = None
+
+def get_existing_product_keys():
+    global existing_product_keys, product_keys_last_check
+    current_time = time.time()
+    
+    # Actualizar cache cada 1 minuto
+    if product_keys_last_check is None or (current_time - product_keys_last_check) > 60:
+        try:
+            conn = get_sql_server_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT ProductAlternateKey FROM [AdventureWorksDW2019].[dbo].[DimProduct]")
+            existing_product_keys = set(row[0] for row in cursor.fetchall())
+            product_keys_last_check = current_time
+        except Exception as e:
+            print(f"Error obteniendo ProductAlternateKey existentes: {e}")
+        finally:
+            if 'cursor' in locals(): cursor.close()
+            if 'conn' in locals(): conn.close()
+    
+    return existing_product_keys
+
 # Variables globales para el seguimiento de CustomerAlternateKey
 last_db_customer_number = None
 customers_created_since_last_query = 0
@@ -31,7 +55,7 @@ def get_next_customer_alternate_key():
             customers_created_since_last_query = 0
         except Exception as e:
             print(f"Error obteniendo último CustomerAlternateKey: {e}")
-            if last_db_customer_number is None:  # Solo usar valor por defecto si no tenemos ningún valor
+            if last_db_customer_number is None:  # Solo usar valor por defecto si no tenemos ningun valor
                 last_db_customer_number = 29483
         finally:
             if 'cursor' in locals(): cursor.close()
@@ -157,24 +181,28 @@ def get_color_translations(color_en):
     }
 
 def generate_product_data(faker):
-    selected_color = faker.random_element(elements=colors)
+    # Obtener las claves existentes
+    existing_keys = get_existing_product_keys()
     
-    model_number = faker.random_element(elements=[750, 760, 770])
-    
-    size_ranges = ["42-46", "48-52"]
-    size_range = faker.random_element(elements=size_ranges)
-    min_size, max_size = map(int, size_range.split("-"))
-    size = str(faker.random_int(min=min_size, max=max_size))
-    
-    # Generar ProductAlternateKey basado en el modelo y caracteristicas
-    # Format: BK-R19B-44 donde:
-    # BK = Bike
-    # R = Road
-    # 19/20/21 = Dos dígitos basados en el modelo (750->19, 760->20, 770->21)
-    # B = Primera letra del color
-    # 44 = Tamanio exacto
-    model_prefix = {"750": "19", "760": "20", "770": "21"}
-    product_alternate_key = f"BK-R{model_prefix[str(model_number)]}{selected_color[0]}-{size}"
+    # Seguir intentando hasta encontrar una clave unica
+    while True:
+        selected_color = faker.random_element(elements=colors)
+        model_number = faker.random_element(elements=[750, 760, 770])
+        
+        size_ranges = ["42-46", "48-52"]
+        size_range = faker.random_element(elements=size_ranges)
+        min_size, max_size = map(int, size_range.split("-"))
+        size = str(faker.random_int(min=min_size, max=max_size))
+        
+        # Generar ProductAlternateKey
+        model_prefix = {"750": "19", "760": "20", "770": "21"}
+        product_alternate_key = f"BK-R{model_prefix[str(model_number)]}{selected_color[0]}-{size}"
+        
+        # Si la clave no existe, continuar con la generación del producto
+        if product_alternate_key not in existing_keys:
+            # Agregar la nueva clave al set de claves existentes
+            existing_keys.add(product_alternate_key)
+            break
     
     # Obtener traducciones de color
     translations = get_color_translations(selected_color)
@@ -182,7 +210,7 @@ def generate_product_data(faker):
     # Generar precios realistas
     standard_cost = round(faker.random_int(min=340, max=360) + faker.random.random(), 4)  # ~350
     list_price = round(standard_cost + 120, 2)  # ~470 (diferencia de 120)
-    dealer_price = round(standard_cost * 1.15, 3)  # 15% mas que standard_cost
+    dealer_price = round(standard_cost * 1.15, 3)  # 15% más que standard_cost
     
     product_data = {
         "type": "product",
