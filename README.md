@@ -58,35 +58,28 @@ SQL_SERVER_USERNAME=your_username
 SQL_SERVER_PASSWORD=your_password
 ```
 
-3. Iniciar RabbitMQ:
-```bash
-# Inicia RabbitMQ en modo detached con el plugin de management habilitado
-docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
-```
-
-4. Iniciar los servicios de Airflow:
+3. Iniciar los servicios con Docker Compose:
 ```bash
 docker-compose up -d
 ```
 
-5. Configurar el entorno del worker de Airflow:
+El archivo `docker-compose.yaml` está configurado para iniciar y coordinar todos los servicios necesarios:
 
-a. Instalar el Driver SQL Server en el contenedor:
+- **postgres**: Base de datos para los metadatos de Airflow
+- **redis**: Broker para el executor de Airflow
+- **rabbitmq**: Sistema de mensajería con interfaz de gestión
+- **airflow-webserver**: Interfaz web de Airflow
+- **airflow-scheduler**: Planificador de tareas
+- **airflow-worker**: Ejecutor de tareas, preconfigurado con:
+  - Driver ODBC para SQL Server
+  - python-dotenv para variables de entorno
+- **airflow-triggerer**: Manejo de triggers asíncronos
+- **flower** (opcional): Monitorización de Celery
+
+4. Configurar las variables de entorno en el worker:
 ```bash
-# Instala el Microsoft ODBC Driver 17 para SQL Server
-docker exec -u root -it data-integration-platform-airflow-worker-1 bash -c "apt-get update && apt-get install -y curl gnupg2 && curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && curl https://packages.microsoft.com/config/debian/10/prod.list > /etc/apt/sources.list.d/mssql-release.list && apt-get update && ACCEPT_EULA=Y apt-get install -y msodbcsql17"
-
-# Verificar la instalación del driver
-docker exec -u root -it data-integration-platform-airflow-worker-1 bash -c "odbcinst -q -d"
-```
-
-b. Configurar las variables de entorno en el worker:
-```bash
-# Copiar el archivo .env al contenedor
+# Copiar el archivo .env al contenedor (aunque el volumen ya está montado en docker-compose)
 docker cp .env data-integration-platform-airflow-worker-1:/opt/airflow/
-
-# Instalar python-dotenv para leer variables de entorno
-docker exec -u airflow data-integration-platform-airflow-worker-1 python -m pip install python-dotenv --user
 ```
 
 ## Estructura del Proyecto
@@ -116,23 +109,31 @@ docker exec -u airflow data-integration-platform-airflow-worker-1 python -m pip 
 
 ## Por Qué Se Realizan Estas Configuraciones
 
-1. **RabbitMQ Setup**:
-   - Se inicia con la interfaz de gestión (-management) para monitorear las colas
+1. **Docker Compose Setup**:
+   - Coordina todos los servicios necesarios en una única configuración
+   - Gestiona las dependencias y el orden de inicio de los servicios
+   - Configura healthchecks para asegurar la disponibilidad de los servicios
+   - Mantiene volúmenes persistentes para datos importantes
+   - Configura la red interna para comunicación entre servicios
+
+2. **RabbitMQ Setup**:
+   - Integrado en docker-compose con la interfaz de gestión
    - Puerto 5672: Para la comunicación AMQP (mensajería)
-   - Puerto 15672: Para acceder a la interfaz web de administración
-   - Modo detached (-d) para ejecutar en segundo plano
-   - Fanout exchange para distribuir mensajes a múltiples suscriptores
-   - Colas duraderas para garantizar la persistencia de mensajes
+   - Puerto 15672: Para la interfaz web de administración
+   - Volumen persistente para mantener los datos entre reinicios
+   - Healthcheck configurado para verificar la conectividad
 
-2. **SQL Server Driver**:
-   - Se instala el driver ODBC 17 en el contenedor del worker porque es necesario para la conexión con SQL Server
-   - Se realiza en el contenedor porque es donde se ejecutan los scripts de ETL
-   - La verificación con odbcinst asegura que el driver está correctamente instalado
+3. **Airflow Worker Setup**:
+   - Preconfigurado con el driver ODBC 17 para SQL Server
+   - Instalación automática de python-dotenv
+   - Gestión de permisos y usuario airflow
+   - Montaje de volúmenes para acceder a scripts y datos
+   - Dependencias configuradas con RabbitMQ y otros servicios
 
-3. **Variables de Entorno**:
-   - Se copia el .env al contenedor para mantener las credenciales seguras
-   - Se usa python-dotenv para leer las variables de forma segura en los scripts
-   - Se instala como usuario airflow para mantener los permisos correctos
+4. **Variables de Entorno**:
+   - Archivo .env montado en el contenedor vía docker-compose
+   - Variables disponibles para todos los servicios que las necesiten
+   - Gestión segura de credenciales y configuraciones
 
 ## Acceso a las Interfaces
 
