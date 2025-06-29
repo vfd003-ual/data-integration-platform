@@ -33,3 +33,6 @@ mydata/
 
 # Docker
 .docker/
+
+# Backups
+backups/

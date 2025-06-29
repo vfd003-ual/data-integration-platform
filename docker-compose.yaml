@@ -74,7 +74,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
-    # - C:/Users/fdvic:/opt/airflow/external_files  # Monta C:/Users/fdvic en el contenedor
+    - ./.env:/opt/airflow/.env
     - ./mydata:/opt/airflow/external_files
     - ./scripts:/opt/airflow/etl_scripts
 
@@ -114,6 +114,20 @@ services:
       start_period: 30s
     restart: always
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
   airflow-webserver:
     <<: *airflow-common
     command: webserver
@@ -148,9 +162,21 @@ services:
 
   airflow-worker:
     <<: *airflow-common
-    command: celery worker
+    user: "0:0"  # Temporal: ejecutar como root para la instalación
+    command: >
+      bash -c '
+      apt-get update &&
+      apt-get install -y curl gnupg2 &&
+      curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - &&
+      curl https://packages.microsoft.com/config/debian/10/prod.list > /etc/apt/sources.list.d/mssql-release.list &&
+      apt-get update &&
+      ACCEPT_EULA=Y apt-get install -y msodbcsql17 &&
+      AIRFLOW_USER="${AIRFLOW_UID:-50000}" &&
+      su airflow -c "pip install python-dotenv" &&
+      chown -R "${AIRFLOW_USER}:0" /opt/airflow &&
+      chmod -R g+rwx /opt/airflow &&
+      su airflow -c "airflow celery worker"'
     healthcheck:
-      # yamllint disable rule:line-length
       test:
         - "CMD-SHELL"
         - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
@@ -160,14 +186,14 @@ services:
       start_period: 30s
     environment:
       <<: *airflow-common-env
-      # Required to handle warm shutdown of the celery workers properly
-      # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
       DUMB_INIT_SETSID: "0"
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
 
   airflow-triggerer:
     <<: *airflow-common
@@ -285,3 +311,4 @@ services:
 
 volumes:
   postgres-db-volume:
+  rabbitmq-data:
